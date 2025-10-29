@@ -21,8 +21,14 @@ dbUsuarios.run(`CREATE TABLE IF NOT EXISTS usuarios (
   email TEXT UNIQUE,
   telefono TEXT,
   nombre TEXT,
-  contraseña TEXT
+  contraseña TEXT,
+  rol_comprador INTEGER DEFAULT 1,
+  rol_vendedor INTEGER DEFAULT 1
 )`);
+
+// Migración: agregar columnas de roles a usuarios existentes
+dbUsuarios.run(`ALTER TABLE usuarios ADD COLUMN rol_comprador INTEGER DEFAULT 1`, () => {});
+dbUsuarios.run(`ALTER TABLE usuarios ADD COLUMN rol_vendedor INTEGER DEFAULT 1`, () => {});
 
 // Conexión y tabla para productos
 const dbProductos = new sqlite3.Database('./product.db', (err) => {
@@ -44,7 +50,7 @@ dbProductos.run(`CREATE TABLE IF NOT EXISTS productos (
 
 // Middleware para CORS (permitir peticiones del frontend)
 app.use(cors({
-  origin: "http://localhost:3001", // Cambia el puerto si tu frontend corre en otro
+  origin: ["http://localhost:3000", "http://localhost:3001"], // Puertos posibles del frontend
   credentials: true
 }));
 // Middleware para procesar JSON y cookies
@@ -65,15 +71,21 @@ app.post("/register", (req, res) => {
       return res.status(409).json({ error: "Ya existe una cuenta registrada con este correo." });
     }
     dbUsuarios.run(
-      "INSERT INTO usuarios (email, telefono, nombre, contraseña) VALUES (?, ?, ?, ?)",
-      [email, telefono, nombre, contraseña],
+      "INSERT INTO usuarios (email, telefono, nombre, contraseña, rol_comprador, rol_vendedor) VALUES (?, ?, ?, ?, ?, ?)",
+      [email, telefono, nombre, contraseña, 1, 1],
       function (err) {
         if (err) {
           return res.status(500).json({ error: "No se pudo registrar el usuario. Intenta nuevamente." });
         }
         res.json({
-          mensaje: `¡Bienvenido/a, ${nombre}! Tu registro fue exitoso.`,
-          usuario: { email, telefono, nombre }
+          mensaje: `¡Bienvenido/a, ${nombre}! Tu registro fue exitoso. Tienes acceso como comprador y vendedor.`,
+          usuario: { 
+            email, 
+            telefono, 
+            nombre,
+            rol_comprador: true,
+            rol_vendedor: true
+          }
         });
       }
     );
@@ -96,20 +108,38 @@ app.post("/login", (req, res) => {
       if (!row) {
         return res.status(401).json({ error: "Credenciales incorrectas." });
       }
-      const payload = { email };
+      const payload = { 
+        email, 
+        rol_comprador: row.rol_comprador === 1,
+        rol_vendedor: row.rol_vendedor === 1
+      };
       const token = jwt.sign(payload, SECRET_KEY, { expiresIn: "1h" });
       res.cookie("token", token, { httpOnly: true, maxAge: 3600000 });
-      res.json({ token });
+      res.json({ 
+        token,
+        usuario: {
+          email: row.email,
+          nombre: row.nombre,
+          telefono: row.telefono,
+          rol_comprador: row.rol_comprador === 1,
+          rol_vendedor: row.rol_vendedor === 1
+        }
+      });
     }
   );
 });
 
 app.get("/usuarios", (req, res) => {
-  dbUsuarios.all("SELECT id, email, telefono, nombre FROM usuarios", [], (err, rows) => {
+  dbUsuarios.all("SELECT id, email, telefono, nombre, rol_comprador, rol_vendedor FROM usuarios", [], (err, rows) => {
     if (err) {
       return res.status(500).json({ error: "Error al consultar usuarios." });
     }
-    res.json({ usuarios: rows });
+    const usuarios = rows.map(row => ({
+      ...row,
+      rol_comprador: row.rol_comprador === 1,
+      rol_vendedor: row.rol_vendedor === 1
+    }));
+    res.json({ usuarios });
   });
 });
 
