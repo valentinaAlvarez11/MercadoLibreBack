@@ -26,9 +26,7 @@ dbUsuarios.run(`CREATE TABLE IF NOT EXISTS usuarios (
   rol_vendedor INTEGER DEFAULT 1
 )`);
 
-// Migración: agregar columnas de roles a usuarios existentes
-dbUsuarios.run(`ALTER TABLE usuarios ADD COLUMN rol_comprador INTEGER DEFAULT 1`, () => {});
-dbUsuarios.run(`ALTER TABLE usuarios ADD COLUMN rol_vendedor INTEGER DEFAULT 1`, () => {});
+// Las columnas de roles ya están definidas en la tabla usuarios
 
 // Conexión y tabla para productos
 const dbProductos = new sqlite3.Database('./product.db', (err) => {
